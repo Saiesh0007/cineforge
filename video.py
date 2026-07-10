@@ -17,7 +17,7 @@ def get_duration(video_path):
     return float(subprocess.check_output(cmd).decode().strip())
 
 
-def extract_frames(video_path, output_dir="frames", num_frames=8):
+def extract_frames(video_path, output_dir="frames", num_frames=5):
 
     os.makedirs(output_dir, exist_ok=True)
 

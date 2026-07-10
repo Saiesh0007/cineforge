@@ -28,7 +28,7 @@ Return ONLY the caption.
 
 def generate_all_captions(frame_paths):
 
-    scene_memory = build_scene_memory(frame_paths)
+    scene_memory = build_scene_memory(frame_paths[:2])
 
     captions = {}
 

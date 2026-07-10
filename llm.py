@@ -14,7 +14,7 @@ client = InferenceClient(
     token=os.getenv("HF_TOKEN")
 )
 
-MAX_SIDE = 512
+MAX_SIDE = 384
 
 
 def image_to_data_url(image_path):
@@ -22,7 +22,7 @@ def image_to_data_url(image_path):
     img.thumbnail((MAX_SIDE, MAX_SIDE))
 
     buffer = BytesIO()
-    img.save(buffer, format="JPEG", quality=70, optimize=True)
+    img.save(buffer, format="JPEG", quality=60, optimize=True)
 
     encoded = base64.b64encode(buffer.getvalue()).decode()
 
@@ -51,15 +51,23 @@ def ask_gemma(prompt, image_paths=None, max_tokens=512):
         }
     )
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": content,
-            }
-        ],
-        max_tokens=max_tokens,
-    )
+    try:
+        print("Images:", len(image_paths) if image_paths else 0)
+        print("Model:", MODEL)
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": content,
+                }
+            ],
+            max_tokens=max_tokens,
+        )
 
-    return response.choices[0].message.content.strip()
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        print("HF ERROR:")
+        print(repr(e))
+        raise
