@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+frames/
+input/
+output/
+assets/
+.env
+sample.mp4
+*.pyc
