@@ -1,53 +1,76 @@
+import json
+import shutil
+import tempfile
+
 from llm import ask_gemma
-from prompts import OBSERVER_PROMPT, ALL_CAPTIONS_PROMPT
-
-
-def build_scene_memory(frame_paths):
-    return ask_gemma(
-        OBSERVER_PROMPT,
-        image_paths=frame_paths,
-        max_tokens=500,
-    )
+from prompts import ALL_CAPTIONS_PROMPT
+from video import extract_frames
 
 
 def generate_all_captions(frame_paths):
-
-    scene_memory = build_scene_memory(frame_paths[:2])
-
-    prompt = ALL_CAPTIONS_PROMPT.format(
-        scene_memory=scene_memory
-    )
-
     response = ask_gemma(
-        prompt,
-        max_tokens=500,
+        ALL_CAPTIONS_PROMPT,
+        image_paths=frame_paths,
+        max_tokens=220,
     )
 
-    captions = {}
+    print("\n========== RAW MODEL RESPONSE ==========")
+    print(response)
+    print("========================================\n")
 
-    current = None
+    # Remove markdown code fences if the model returns them
+    response = response.strip()
 
-    for line in response.splitlines():
+    if response.startswith("```json"):
+        response = response.replace("```json", "", 1)
 
-        line = line.strip()
+    if response.startswith("```"):
+        response = response.replace("```", "", 1)
 
-        if line.startswith("FORMAL:"):
-            current = "formal"
-            captions[current] = line.replace("FORMAL:", "").strip()
+    if response.endswith("```"):
+        response = response[:-3]
 
-        elif line.startswith("SARCASTIC:"):
-            current = "sarcastic"
-            captions[current] = line.replace("SARCASTIC:", "").strip()
+    response = response.strip()
 
-        elif line.startswith("TECH:"):
-            current = "humorous_tech"
-            captions[current] = line.replace("TECH:", "").strip()
+    try:
+        captions = json.loads(response)
 
-        elif line.startswith("CASUAL:"):
-            current = "humorous_non_tech"
-            captions[current] = line.replace("CASUAL:", "").strip()
+    except json.JSONDecodeError as e:
+        print("\n❌ Invalid JSON returned by model:")
+        print(response)
+        raise Exception(f"Invalid JSON: {e}")
 
-        elif current:
-            captions[current] += " " + line
+    required = {
+        "formal",
+        "sarcastic",
+        "humorous_tech",
+        "humorous_non_tech",
+    }
 
-    return scene_memory, captions
+    missing = required - captions.keys()
+
+    if missing:
+        raise Exception(
+            f"Missing required captions: {missing}"
+        )
+
+    return captions
+
+
+def process_video(video_path):
+    temp_dir = tempfile.mkdtemp(prefix="cineforge_")
+
+    try:
+
+        frame_paths = extract_frames(
+            video_path,
+            output_dir=temp_dir,
+            num_frames=2,
+        )
+
+        captions = generate_all_captions(frame_paths)
+
+        return captions
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)

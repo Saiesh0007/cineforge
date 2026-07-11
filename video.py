@@ -1,5 +1,54 @@
 import os
 import subprocess
+import tempfile
+
+import yt_dlp
+
+
+def download_video(url):
+    os.makedirs("videos", exist_ok=True)
+
+    output_template = os.path.join(
+        tempfile.gettempdir(),
+        "%(id)s.%(ext)s",
+    )
+
+    ydl_opts = {
+        "format": "mp4[height<=720]/best[height<=720]/best",
+        "outtmpl": output_template,
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+
+        # Faster failure
+        "retries": 1,
+        "fragment_retries": 1,
+        "socket_timeout": 15,
+
+        # Generic browser headers
+        "http_headers": {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 "
+                "(KHTML, like Gecko) "
+                "Chrome/138.0 Safari/537.36"
+            )
+        },
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+
+            info = ydl.extract_info(
+                url,
+                download=True,
+            )
+
+            return ydl.prepare_filename(info)
+
+    except Exception as e:
+        raise RuntimeError(f"Video download failed: {e}")
 
 
 def get_duration(video_path):
@@ -14,11 +63,16 @@ def get_duration(video_path):
         video_path,
     ]
 
-    return float(subprocess.check_output(cmd).decode().strip())
+    return float(
+        subprocess.check_output(cmd).decode().strip()
+    )
 
 
-def extract_frames(video_path, output_dir="frames", num_frames=5):
-
+def extract_frames(
+    video_path,
+    output_dir="frames",
+    num_frames=2,
+):
     os.makedirs(output_dir, exist_ok=True)
 
     duration = get_duration(video_path)

@@ -1,78 +1,35 @@
-OBSERVER_PROMPT = """
-You are an expert video analyst.
+ALL_CAPTIONS_PROMPT = """
+You are an expert social media caption writer.
 
-You are given frames extracted from a video in chronological order.
+Analyze the supplied video frames.
 
-Your task is to create a factual scene memory.
+Infer:
+- scene
+- activity
+- mood
+- context
 
-Describe:
-
-1. Setting
-2. Main subjects
-3. Important objects
-4. Primary action
-5. Secondary actions
-6. Temporal flow (what happens from beginning to end)
-7. Visible text (if any)
-8. Important details that should not be omitted in captions
+Generate FOUR captions.
 
 Rules:
+- 8–15 words each
+- Natural English
+- No hashtags
+- No emojis
+- No markdown
+- No quotation marks
 
-- Do NOT guess.
-- Do NOT invent.
-- Ignore anything uncertain.
-- Be concise but complete.
+Return ONLY valid JSON.
 
-Output in this format:
+Schema:
 
-SETTING:
-SUBJECTS:
-OBJECTS:
-PRIMARY ACTION:
-SECONDARY ACTION:
-TEMPORAL FLOW:
-VISIBLE TEXT:
-IMPORTANT DETAILS:
-"""
+{
+"formal": "...",
+"sarcastic": "...",
+"humorous_tech": "...",
+"humorous_non_tech": "..."
+}
 
-ALL_CAPTIONS_PROMPT = """
-You are an expert caption writer.
-
-Using the scene memory below, generate FOUR captions.
-
-Scene Memory:
-
-{scene_memory}
-
-Requirements:
-
-1. Formal
-- Professional
-- 25-60 words
-
-2. Sarcastic
-- Dry irony
-- Based only on the scene
-
-3. Tech Humor
-- Programming/AI joke
-- Based only on the scene
-
-4. Casual Humor
-- Everyday funny
-- Natural
-
-Return EXACTLY in this format:
-
-FORMAL:
-...
-
-SARCASTIC:
-...
-
-TECH:
-...
-
-CASUAL:
-...
+Do not return any explanation.
+Do not wrap JSON inside markdown.
 """

@@ -1,10 +1,11 @@
 import base64
+import os
+import time
 from io import BytesIO
 
-from PIL import Image
-from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
-import os
+from huggingface_hub import InferenceClient
+from PIL import Image
 
 load_dotenv()
 
@@ -18,18 +19,32 @@ MAX_SIDE = 384
 
 
 def image_to_data_url(image_path):
+
     img = Image.open(image_path).convert("RGB")
+
     img.thumbnail((MAX_SIDE, MAX_SIDE))
 
     buffer = BytesIO()
-    img.save(buffer, format="JPEG", quality=60, optimize=True)
 
-    encoded = base64.b64encode(buffer.getvalue()).decode()
+    img.save(
+        buffer,
+        format="JPEG",
+        quality=60,
+        optimize=True,
+    )
+
+    encoded = base64.b64encode(
+        buffer.getvalue()
+    ).decode()
 
     return f"data:image/jpeg;base64,{encoded}"
 
 
-def ask_gemma(prompt, image_paths=None, max_tokens=512):
+def ask_gemma(
+    prompt,
+    image_paths=None,
+    max_tokens=220,
+):
 
     content = []
 
@@ -51,23 +66,36 @@ def ask_gemma(prompt, image_paths=None, max_tokens=512):
         }
     )
 
-    try:
-        print("Images:", len(image_paths) if image_paths else 0)
-        print("Model:", MODEL)
-        response = client.chat.completions.create(
-            model=MODEL,
-            messages=[
-                {
-                    "role": "user",
-                    "content": content,
-                }
-            ],
-            max_tokens=max_tokens,
-        )
+    print("=" * 60)
+    print("Calling Gemma...")
+    print(f"Images: {len(image_paths) if image_paths else 0}")
+    print(f"Model : {MODEL}")
+    print("=" * 60)
 
-        return response.choices[0].message.content.strip()
+    for attempt in range(3):
 
-    except Exception as e:
-        print("HF ERROR:")
-        print(repr(e))
-        raise
+        try:
+
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": content,
+                    }
+                ],
+                max_tokens=max_tokens,
+            )
+
+            return response.choices[0].message.content.strip()
+
+        except Exception as e:
+
+            print(f"Attempt {attempt + 1} failed")
+
+            print(repr(e))
+
+            if attempt == 2:
+                raise
+
+            time.sleep(2 ** attempt)
