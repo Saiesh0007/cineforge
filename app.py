@@ -201,7 +201,7 @@ if generate:
         # Stage 3
         # -----------------------------
 
-        status.write("🧠 Building Scene Memory with Gemma 4...")
+        status.write("🧠 Understanding video...")
 
         scene_memory, captions = generate_all_captions(frame_paths)
 
@@ -214,7 +214,7 @@ if generate:
         # Stage 4
         # -----------------------------
 
-        status.write("✍ Generating four caption styles...")
+        status.write("✍ Generating captions")
 
         status.write("✅ Formal")
         status.write("✅ Sarcastic")

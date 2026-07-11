@@ -35,37 +35,44 @@ VISIBLE TEXT:
 IMPORTANT DETAILS:
 """
 
-STYLE_PROMPTS = {
-    "formal": """
-Write one formal caption.
+ALL_CAPTIONS_PROMPT = """
+You are an expert caption writer.
+
+Using the scene memory below, generate FOUR captions.
+
+Scene Memory:
+
+{scene_memory}
 
 Requirements:
+
+1. Formal
 - Professional
-- Objective
-- 25–60 words
-- No humor
-""",
+- 25-60 words
 
-    "sarcastic": """
-Write one sarcastic caption.
-
-Requirements:
+2. Sarcastic
 - Dry irony
-- Based ONLY on the scene memory
-- Don't invent new events
-""",
+- Based only on the scene
 
-    "humorous_tech": """
-Write one funny caption using programming,
-AI or technology references.
+3. Tech Humor
+- Programming/AI joke
+- Based only on the scene
 
-Keep it tied to the actual scene.
-""",
+4. Casual Humor
+- Everyday funny
+- Natural
 
-    "humorous_non_tech": """
-Write one funny everyday caption.
+Return EXACTLY in this format:
 
-No programming jokes.
-Keep it natural.
+FORMAL:
+...
+
+SARCASTIC:
+...
+
+TECH:
+...
+
+CASUAL:
+...
 """
-}

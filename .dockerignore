@@ -4,6 +4,5 @@ frames/
 input/
 output/
 assets/
-.env
 sample.mp4
 *.pyc
