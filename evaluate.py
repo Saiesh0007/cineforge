@@ -7,7 +7,7 @@ from pipeline import process_video
 from video import download_video
 
 if os.path.exists("/input/tasks.json"):
-    # Docker / AMD evaluator
+    # AMD evaluator
     INPUT_PATH = "/input/tasks.json"
     OUTPUT_PATH = "/output/results.json"
 else:
@@ -27,7 +27,7 @@ def load_tasks():
 
 
 def save_results(results):
-    os.makedirs("/output", exist_ok=True)
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
 
     with open(OUTPUT_PATH, "w") as f:
         json.dump(results, f, indent=2)
@@ -74,7 +74,6 @@ def main():
 
     results = []
 
-    # Create initial results file immediately
     save_results(results)
 
     for i, task in enumerate(tasks):
@@ -82,9 +81,7 @@ def main():
         print(f"\nProcessing {i+1}/{len(tasks)}")
 
         try:
-
             result = process_task(task)
-
             results.append(result)
 
         except Exception as e:
@@ -93,18 +90,17 @@ def main():
 
             results.append(
                 {
-                    "task_id": task.get("task_id"),
+                    "task_id": task.get("task_id") or task.get("id"),
                     "captions": {
                         "formal": "Unable to generate caption.",
                         "sarcastic": "Well, that didn't go as planned.",
                         "humorous_tech": "Exception thrown during caption generation.",
-                        "humorous_non_tech": "Something unexpected happened.",
+                        "humorous_non_tech": "Something unexpected happened."
                     },
-                    "error": str(e),
+                    "error": str(e)
                 }
             )
 
-        # Save after every task
         save_results(results)
 
         print("Results saved.")
