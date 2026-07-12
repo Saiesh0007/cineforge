@@ -68,50 +68,48 @@ def get_duration(video_path):
     )
 
 
+def choose_num_frames(duration_s: float, seconds_per_frame: float = 5.0,
+                      min_frames: int = 8, max_frames: int = 20) -> int:
+    return max(min_frames, min(max_frames, round(duration_s / seconds_per_frame)))
+
+
 def extract_frames(
     video_path,
     output_dir="frames",
-    num_frames=2,
+    num_frames=None,
+    max_width=1024,
 ):
     os.makedirs(output_dir, exist_ok=True)
 
-    duration = get_duration(video_path)
+    duration = max(get_duration(video_path), 1.0)
+    
+    if num_frames is None:
+        num_frames = choose_num_frames(duration)
 
-    padding = duration * 0.05
+    fps = num_frames / duration
+    pattern = os.path.join(output_dir, "frame_%03d.jpg")
 
-    frame_paths = []
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            video_path,
+            "-vf",
+            f"fps={fps},scale='min({max_width},iw)':-2",
+            "-vframes",
+            str(num_frames),
+            "-q:v",
+            "3",
+            pattern,
+            "-loglevel",
+            "error",
+        ],
+        check=True,
+    )
 
-    for i in range(num_frames):
-
-        timestamp = padding + (
-            i * (duration - 2 * padding)
-            / max(1, num_frames - 1)
-        )
-
-        filename = os.path.join(
-            output_dir,
-            f"frame_{i:02d}.jpg",
-        )
-
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                str(timestamp),
-                "-i",
-                video_path,
-                "-frames:v",
-                "1",
-                "-q:v",
-                "2",
-                filename,
-                "-loglevel",
-                "error",
-            ],
-            check=True,
-        )
-
-        frame_paths.append(filename)
+    frame_paths = sorted(
+        os.path.join(output_dir, f) for f in os.listdir(output_dir) if f.startswith("frame_")
+    )
 
     return frame_paths

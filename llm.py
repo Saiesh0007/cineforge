@@ -1,101 +1,75 @@
 import base64
+import json
 import os
-import time
 from io import BytesIO
 
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
-from PIL import Image
+from openai import OpenAI
 
 load_dotenv()
 
-MODEL = "google/gemma-4-31B-it"
+FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY", "")
+FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
+MODEL = "accounts/fireworks/models/qwen3p7-plus"
 
-client = InferenceClient(
-    token=os.getenv("HF_TOKEN")
+client = OpenAI(
+    api_key=FIREWORKS_API_KEY, 
+    base_url=FIREWORKS_BASE_URL, 
+    timeout=120.0, 
+    max_retries=3
 )
 
-MAX_SIDE = 384
+def image_to_base64(image_path):
+    with open(image_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
 
-
-def image_to_data_url(image_path):
-
-    img = Image.open(image_path).convert("RGB")
-
-    img.thumbnail((MAX_SIDE, MAX_SIDE))
-
-    buffer = BytesIO()
-
-    img.save(
-        buffer,
-        format="JPEG",
-        quality=60,
-        optimize=True,
-    )
-
-    encoded = base64.b64encode(
-        buffer.getvalue()
-    ).decode()
-
-    return f"data:image/jpeg;base64,{encoded}"
-
-
-def ask_gemma(
-    prompt,
-    image_paths=None,
-    max_tokens=220,
-):
-
+def describe_frames(frames_paths: list, prompt: str, max_tokens: int = 1536) -> str:
+    """Send JPEG frames (raw base64, chronological order) plus a prompt; return text."""
     content = []
-
-    if image_paths:
-        for image in image_paths:
-            content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": image_to_data_url(image)
-                    },
-                }
-            )
-
-    content.append(
-        {
-            "type": "text",
-            "text": prompt,
-        }
+    for path in frames_paths:
+        b64 = image_to_base64(path)
+        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+    
+    content.append({"type": "text", "text": prompt})
+    
+    print("=" * 60)
+    print(f"Calling Fireworks AI ({MODEL}) - describe_frames...")
+    print(f"Images: {len(frames_paths)}")
+    print("=" * 60)
+    
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        reasoning_effort="none",
+        messages=[{"role": "user", "content": content}],
     )
+    return response.choices[0].message.content.strip()
 
-    print("=" * 60)
-    print("Calling Gemma...")
-    print(f"Images: {len(image_paths) if image_paths else 0}")
-    print(f"Model : {MODEL}")
-    print("=" * 60)
-
-    for attempt in range(3):
-
-        try:
-
-            response = client.chat.completions.create(
-                model=MODEL,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": content,
-                    }
-                ],
-                max_tokens=max_tokens,
-            )
-
-            return response.choices[0].message.content.strip()
-
-        except Exception as e:
-
-            print(f"Attempt {attempt + 1} failed")
-
-            print(repr(e))
-
-            if attempt == 2:
-                raise
-
-            time.sleep(2 ** attempt)
+def generate_json(prompt: str, schema: dict, frames_paths: list = None, max_tokens: int = 1024) -> dict:
+    """Generate a JSON object guaranteed to match `schema` (structured outputs)."""
+    if frames_paths:
+        content = []
+        for path in frames_paths:
+            b64 = image_to_base64(path)
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}})
+        content.append({"type": "text", "text": prompt})
+        print(f"Calling Fireworks AI ({MODEL}) - generate_json with {len(frames_paths)} images...")
+    else:
+        content = prompt
+        print(f"Calling Fireworks AI ({MODEL}) - generate_json without images...")
+        
+    response = client.chat.completions.create(
+        model=MODEL,
+        max_tokens=max_tokens,
+        reasoning_effort="none",
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "Response", "schema": schema, "strict": False},
+        },
+        messages=[{"role": "user", "content": content}],
+    )
+    try:
+        return json.loads(response.choices[0].message.content.strip())
+    except Exception as e:
+        print(f"Failed to decode JSON: {response.choices[0].message.content}")
+        raise e

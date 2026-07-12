@@ -6,8 +6,14 @@ import traceback
 from pipeline import process_video
 from video import download_video
 
-INPUT_PATH = "/input/tasks.json"
-OUTPUT_PATH = "/output/results.json"
+if os.path.exists("/input/tasks.json"):
+    # Docker / AMD evaluator
+    INPUT_PATH = "/input/tasks.json"
+    OUTPUT_PATH = "/output/results.json"
+else:
+    # Local development
+    INPUT_PATH = "input/tasks.json"
+    OUTPUT_PATH = "output/results.json"
 
 
 def load_tasks():

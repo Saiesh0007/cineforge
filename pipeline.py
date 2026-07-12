@@ -1,58 +1,78 @@
 import json
 import shutil
 import tempfile
+import sys
+import traceback
 
-from llm import ask_gemma
-from prompts import ALL_CAPTIONS_PROMPT
+from llm import describe_frames, generate_json
+from prompts import (
+    DESCRIBE_FACTS_PROMPT,
+    CANDIDATE_SCHEMA,
+    STYLE_GUIDE,
+    facts_schema,
+    specialist_prompt,
+    selection_prompt,
+)
 from video import extract_frames
 
 
+def get_grounding(frame_paths):
+    prompt = DESCRIBE_FACTS_PROMPT.format(n=len(frame_paths))
+    result = generate_json(prompt, facts_schema(), frames_paths=frame_paths, max_tokens=1536)
+    
+    description = str(result.get("description", "")).strip()
+    facts = [str(f).strip() for f in result.get("facts", []) if str(f).strip()]
+    return description, facts
+
+
+def specialists_and_select(description: str, facts: list, styles: list, frame_paths: list) -> dict:
+    candidates = {}
+    for s in styles:
+        if s not in STYLE_GUIDE:
+            continue
+        try:
+            prompt = specialist_prompt(s, description, facts)
+            # The specialist generation does not need the images, it's text-only based on the facts
+            candidates[s] = generate_json(prompt, CANDIDATE_SCHEMA, frames_paths=None, max_tokens=800)
+        except Exception as e:
+            print(f"Specialist call failed for {s}: {e}", file=sys.stderr)
+            traceback.print_exc()
+
+    result = {}
+    if candidates:
+        sel_schema = {
+            "type": "object",
+            "properties": {s: {"type": "string"} for s in candidates},
+            "required": list(candidates),
+            "additionalProperties": False,
+        }
+        try:
+            prompt = selection_prompt(description, facts, candidates)
+            chosen = generate_json(prompt, sel_schema, frames_paths=frame_paths, max_tokens=2000)
+            for s in candidates:
+                result[s] = str(chosen.get(s, "")).strip()
+        except Exception as e:
+            print(f"Selection failed: {e}", file=sys.stderr)
+            traceback.print_exc()
+            
+        for s in candidates:
+            if not result.get(s, "").strip():
+                result[s] = str(candidates[s].get("a", "")).strip()
+                
+    return {s: result.get(s, "") for s in styles}
+
+
 def generate_all_captions(frame_paths):
-    response = ask_gemma(
-        ALL_CAPTIONS_PROMPT,
-        image_paths=frame_paths,
-        max_tokens=220,
-    )
-
-    print("\n========== RAW MODEL RESPONSE ==========")
-    print(response)
-    print("========================================\n")
-
-    # Remove markdown code fences if the model returns them
-    response = response.strip()
-
-    if response.startswith("```json"):
-        response = response.replace("```json", "", 1)
-
-    if response.startswith("```"):
-        response = response.replace("```", "", 1)
-
-    if response.endswith("```"):
-        response = response[:-3]
-
-    response = response.strip()
-
-    try:
-        captions = json.loads(response)
-
-    except json.JSONDecodeError as e:
-        print("\n❌ Invalid JSON returned by model:")
-        print(response)
-        raise Exception(f"Invalid JSON: {e}")
-
-    required = {
-        "formal",
-        "sarcastic",
-        "humorous_tech",
-        "humorous_non_tech",
-    }
-
-    missing = required - captions.keys()
+    description, facts = get_grounding(frame_paths)
+    
+    styles = ["formal", "sarcastic", "humorous_tech", "humorous_non_tech"]
+    captions = specialists_and_select(description, facts, styles, frame_paths)
+    
+    required = set(styles)
+    missing = required - set(captions.keys())
 
     if missing:
-        raise Exception(
-            f"Missing required captions: {missing}"
-        )
+        raise Exception(f"Missing required captions: {missing}")
 
     return captions
 
@@ -61,12 +81,13 @@ def process_video(video_path):
     temp_dir = tempfile.mkdtemp(prefix="cineforge_")
 
     try:
-
         frame_paths = extract_frames(
             video_path,
             output_dir=temp_dir,
-            num_frames=2,
+            num_frames=None,
         )
+        
+        print(f"Extracted {len(frame_paths)} frames for {video_path}")
 
         captions = generate_all_captions(frame_paths)
 
