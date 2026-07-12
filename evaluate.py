@@ -27,7 +27,7 @@ def load_tasks():
 
 
 def save_results(results):
-    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    os.makedirs("/output", exist_ok=True)
 
     with open(OUTPUT_PATH, "w") as f:
         json.dump(results, f, indent=2)
