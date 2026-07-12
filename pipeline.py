@@ -106,7 +106,7 @@ def process_video(video_path):
         frame_paths = extract_frames(
             video_path,
             output_dir=temp_dir,
-            num_frames=25,
+            num_frames=15,
         )
         
         print(f"Extracted {len(frame_paths)} frames for {video_path}")
