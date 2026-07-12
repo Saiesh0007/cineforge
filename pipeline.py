@@ -12,6 +12,8 @@ from prompts import (
     facts_schema,
     specialist_prompt,
     selection_prompt,
+    audit_schema,
+    audit_prompt,
 )
 from video import extract_frames
 
@@ -27,13 +29,17 @@ def get_grounding(frame_paths):
 
 def specialists_and_select(description: str, facts: list, styles: list, frame_paths: list) -> dict:
     candidates = {}
+    prior_captions = []
+    
     for s in styles:
         if s not in STYLE_GUIDE:
             continue
         try:
-            prompt = specialist_prompt(s, description, facts)
+            prompt = specialist_prompt(s, description, facts, prior_captions=prior_captions)
             # The specialist generation does not need the images, it's text-only based on the facts
-            candidates[s] = generate_json(prompt, CANDIDATE_SCHEMA, frames_paths=None, max_tokens=800)
+            cands = generate_json(prompt, CANDIDATE_SCHEMA, frames_paths=None, max_tokens=800)
+            candidates[s] = cands
+            prior_captions.extend([cands.get("a", ""), cands.get("b", "")])
         except Exception as e:
             print(f"Specialist call failed for {s}: {e}", file=sys.stderr)
             traceback.print_exc()
@@ -58,8 +64,24 @@ def specialists_and_select(description: str, facts: list, styles: list, frame_pa
         for s in candidates:
             if not result.get(s, "").strip():
                 result[s] = str(candidates[s].get("a", "")).strip()
+
+    # Audit pass
+    audited_result = {}
+    for s, caption in result.items():
+        if not caption:
+            audited_result[s] = caption
+            continue
+        try:
+            print(f"Running audit pass for {s}...")
+            prompt = audit_prompt(s, description, facts, caption)
+            audit_resp = generate_json(prompt, audit_schema(), frames_paths=frame_paths, max_tokens=800)
+            audited_result[s] = str(audit_resp.get("caption", caption)).strip()
+        except Exception as e:
+            print(f"Audit failed for {s}: {e}", file=sys.stderr)
+            traceback.print_exc()
+            audited_result[s] = caption
                 
-    return {s: result.get(s, "") for s in styles}
+    return {s: audited_result.get(s, "") for s in styles}
 
 
 def generate_all_captions(frame_paths):
@@ -84,7 +106,7 @@ def process_video(video_path):
         frame_paths = extract_frames(
             video_path,
             output_dir=temp_dir,
-            num_frames=None,
+            num_frames=25,
         )
         
         print(f"Extracted {len(frame_paths)} frames for {video_path}")

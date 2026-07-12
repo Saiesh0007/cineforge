@@ -59,6 +59,15 @@ CAPTION_EXEMPLARS = {
     ],
 }
 
+DISCIPLINE = (
+    "GROUNDING DISCIPLINE (the judge penalizes any invented detail):\n"
+    "- Use ONLY what the frames/FACTS show. Never invent actions the subject is not clearly doing.\n"
+    "- Use the observed setting EXACTLY. Do not rename it unless that is what is shown.\n"
+    "- If a location, brand, city, org, or sign is not clearly readable, stay generic.\n"
+    "- Never mention missing audio, playback speed, frames, filters, or video/encoding artifacts.\n"
+    "- Never invent dialogue or intentions."
+)
+
 DESCRIBE_FACTS_PROMPT = (
     "You are shown {n} frames sampled evenly, in chronological order, from a single video clip "
     "(roughly 30 seconds to 2 minutes long). Respond with a single JSON object with two fields:\n\n"
@@ -74,7 +83,8 @@ DESCRIBE_FACTS_PROMPT = (
     "details), and only state a colour of a background element if it is unambiguous.\n\n"
     "Describe only what is clearly visible in the frames; do not speculate or invent details. "
     "Do not identify a city, country, company, building, or sign text unless it is large, "
-    "legible, and unambiguous in the sampled frames."
+    "legible, and unambiguous in the sampled frames.\n\n"
+    + DISCIPLINE
 )
 
 CANDIDATE_SCHEMA = {
@@ -95,7 +105,7 @@ def facts_schema() -> dict:
         "additionalProperties": False,
     }
 
-def specialist_prompt(style: str, description: str, facts: list) -> str:
+def specialist_prompt(style: str, description: str, facts: list, prior_captions: list = None) -> str:
     exemplars = CAPTION_EXEMPLARS.get(style, [])
     ex_block = ""
     if exemplars:
@@ -106,6 +116,15 @@ def specialist_prompt(style: str, description: str, facts: list) -> str:
             f"subjects or jokes:\n{ex_lines}\n"
         )
     facts_block = "\n".join(f"- {f}" for f in facts) if facts else "(none extracted)"
+    
+    variety_note = ""
+    if prior_captions:
+        variety_note = (
+            "\nCaptions already written for this clip in other styles. "
+            "Use a different sentence structure and comedic angle: "
+            + " | ".join(prior_captions) + "\n\n"
+        )
+
     return (
         f"{PERSONAS[style]}\n\n"
         "Here is a factual description of a video clip:\n\n"
@@ -115,6 +134,8 @@ def specialist_prompt(style: str, description: str, facts: list) -> str:
         f'Write TWO different candidate captions for this video in the "{style}" '
         f"style: {STYLE_GUIDE[style]}\n"
         f"{ex_block}\n"
+        f"{DISCIPLINE}\n\n"
+        f"{variety_note}"
         "The two candidates must take clearly different angles (different detail "
         "focused on, or a different joke/framing). Each caption will be scored by a "
         "judge who watches the video: 1-5 for accuracy (every claim visibly true) and "
@@ -152,4 +173,33 @@ def selection_prompt(description: str, facts: list, candidates: dict) -> str:
         "claim is checkable. Return the chosen caption TEXT exactly as written, one "
         "per style, in a JSON object keyed by style name. Do not rewrite, merge, or "
         "edit the captions; copy the winner verbatim."
+    )
+
+def audit_schema() -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "caption": {"type": "string"}
+        },
+        "required": ["caption"],
+        "additionalProperties": False,
+    }
+
+def audit_prompt(style: str, description: str, facts: list, caption: str) -> str:
+    facts_block = "\n".join(f"- {f}" for f in facts) if facts else "(none extracted)"
+    return (
+        "You are a strict caption quality controller. Below is a factual description and a "
+        "list of facts about a video clip, followed by a candidate caption.\n\n"
+        "Factual description:\n"
+        f"{description}\n\n"
+        "Concrete facts:\n"
+        f"{facts_block}\n\n"
+        f"Candidate caption (style: {style}):\n"
+        f"{caption}\n\n"
+        "Task:\n"
+        "1. Check if the caption contains ANY hallucinated detail, action, named entity, or location "
+        "not explicitly supported by the facts/description.\n"
+        "2. Check if the caption mentions video artifacts, frames, or missing audio.\n"
+        "If it passes, return the caption unchanged. If it fails, rewrite it minimally to pass "
+        "while maintaining the style. Return a JSON object with key 'caption'."
     )
